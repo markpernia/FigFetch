@@ -1,0 +1,40 @@
+# Dependencies
+
+node\_modules/
+# Build output
+
+dist/
+build/
+out/
+release/
+
+# Electron specific
+\*.asar
+
+# Logs
+*.log
+yarn-debug.log*
+npm-debug.log\*
+
+# OS files
+.DS\_Store
+Thumbs.db
+
+# Env files
+.env
+.env.\*
+
+# VSCode settings
+.vscode/
+
+# Coverage
+coverage/
+
+# Cache
+.cache/
+
+# Others
+\*.tgz
+
+# Optional: compiled binaries
+\*.node
