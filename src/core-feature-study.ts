@@ -1,0 +1,114 @@
+import { chromium } from 'playwright';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Validate environment variables
+const USER_EMAIL = process.env.FIGMA_EMAIL;
+const USER_PASS = process.env.FIGMA_PASSWORD;
+const FIGMA_FILE_URL = process.env.TEST_FILE_URL;
+const DOWNLOADS_PATH = path.resolve(process.env.DOWNLOADS_PATH || 'downloads');
+const WAIT_TIMEOUT = 10000; // 10 seconds to avoid anti-automation detection
+
+// Check for required variables
+if (!USER_EMAIL || !USER_PASS || !FIGMA_FILE_URL) {
+  throw new Error('Missing required environment variables: FIGMA_EMAIL, FIGMA_PASSWORD, or TEST_FILE_URL');
+}
+
+async function downloadFigmaFile() {
+  // Ensure downloads directory exists
+  fs.mkdirSync(DOWNLOADS_PATH, { recursive: true });
+
+  // Launch browser
+  const browser = await chromium.launch({ headless: false }); // Set headless: true for no UI
+  const context = await browser.newContext({
+    acceptDownloads: true,
+  });
+  const page = await context.newPage();
+
+  try {
+    // Navigate to Figma login page
+    console.log('Navigating to Figma login page...');
+    await page.goto('https://www.figma.com/login', { timeout: 60000 });
+
+    // Fill in email and password
+    console.log('Filling login credentials...');
+    await page.fill('input[name="email"]', USER_EMAIL!, { timeout: 10000 });
+    await page.fill('input[name="password"]', USER_PASS!, { timeout: 10000 });
+
+    // Submit login form
+    console.log('Submitting login form...');
+    await page.click('button[type="submit"]', { timeout: 10000 });
+
+    // Wait for navigation to complete after login
+    console.log('Waiting for post-login navigation...');
+    await page.waitForURL(/.*figma.com\/files.*/, { timeout: 60000 });
+
+    // Navigate to the specific Figma file
+    console.log('Navigating to Figma file...');
+    await page.goto(FIGMA_FILE_URL!, { timeout: 60000 });
+
+    // Wait for the file to load
+    console.log('Waiting for canvas to load...');
+    await page.waitForSelector('canvas', { timeout: 60000 });
+
+    // Add delay to avoid anti-automation detection
+    console.log(`Waiting ${WAIT_TIMEOUT / 1000} seconds to avoid bot detection...`);
+    await page.waitForTimeout(WAIT_TIMEOUT);
+
+    // Use keyboard shortcut Cmd + / (or Ctrl + /) to open command palette
+    console.log('Opening command palette with Cmd + / or Ctrl + /...');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+/' : 'Control+/');
+
+    // Wait for command palette input
+    console.log('Waiting for command palette input...');
+    const inputField = await page.locator('[data-testid="quick-actions-search-input"]').first();
+    try {
+      await inputField.waitFor({ state: 'visible', timeout: 15000 });
+      console.log('Command palette input found:', await inputField.evaluate((el: HTMLElement) => el.outerHTML));
+    } catch (error) {
+      console.error('Command palette input not found, proceeding to type anyway...');
+    }
+
+    // Type "save" to select "Save local copy..."
+    console.log('Typing "save" in command palette...');
+    await page.keyboard.type('save', { delay: 100 }); // Slow typing to mimic human input
+
+    // Press Enter to select the first option ("Save local copy...")
+    console.log('Pressing Enter to select "Save local copy..."');
+    await page.keyboard.press('Enter');
+
+    // Handle the download with fallback
+    console.log('Waiting for download...');
+    let download;
+    try {
+      download = await page.waitForEvent('download', { timeout: 15000 });
+    } catch (error) {
+      console.error('Download not triggered via command palette, trying Cmd + S or Ctrl + S...');
+      await page.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S');
+      download = await page.waitForEvent('download', { timeout: 15000 });
+    }
+
+    // Handle the download
+    console.log('Processing download...');
+    const suggestedFileName = await download.suggestedFilename();
+    const finalPath = path.join(DOWNLOADS_PATH, suggestedFileName);
+
+    // Save the downloaded file
+    console.log('Saving downloaded file...');
+    await download.saveAs(finalPath);
+    console.log(`File downloaded and saved to: ${finalPath}`);
+  } catch (error) {
+    console.error('Error during automation:', error);
+  } finally {
+    // Close the browser
+    console.log('Closing browser...');
+    await browser.close();
+  }
+}
+
+// Run the script
+downloadFigmaFile().catch(console.error);
