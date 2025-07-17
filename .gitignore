@@ -24,4 +24,6 @@ dist-ssr
 *.sw?
 .env
 .env*
-sandbox.ts
+
+# Others
+sandbox
